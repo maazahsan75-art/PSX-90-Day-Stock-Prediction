@@ -6,208 +6,194 @@ import os
 import zipfile
 import matplotlib.pyplot as plt
 
-st.set_page_config(layout="wide", page_title="PSX 90-Day Predictor")
+st.set_page_config(layout="wide", page_title="PSX 90-Day Stock Predictor")
 
-# --- Extract models.zip EVERY RUN ---
-if os.path.exists("models.zip"):
-    import shutil
-    if os.path.exists("models_extracted"):
-        shutil.rmtree("models_extracted")  # delete old folder
+
+# =====================================================
+# 1 — Extract models.zip (only once)
+# =====================================================
+if os.path.exists("models.zip") and not os.path.exists("models_extracted"):
     with zipfile.ZipFile("models.zip", "r") as z:
         z.extractall("models_extracted")
 
-# --- DEBUG OUTPUT ---
-st.write("📁 Root directory:", os.listdir("."))
-if os.path.exists("models_extracted"):
-    st.write("📁 models_extracted:", os.listdir("models_extracted"))
-else:
-    st.write("❌ models_extracted not found")
 
-# --- Load Models ---
-def load_models(ticker):
+# =====================================================
+# 2 — Helper: Load models
+# =====================================================
+def load_models(ticker: str):
     rf_path = os.path.join("models_extracted", f"{ticker}_RF.pkl")
     xgb_path = os.path.join("models_extracted", f"{ticker}_XGB.pkl")
 
-    rf = joblib.load(rf_path) if os.path.exists(rf_path) else None
-    xgb = joblib.load(xgb_path) if os.path.exists(xgb_path) else None
+    rf_model = joblib.load(rf_path) if os.path.exists(rf_path) else None
+    xgb_model = joblib.load(xgb_path) if os.path.exists(xgb_path) else None
 
-    return rf, xgb
+    return rf_model, xgb_model
 
-# -----------------------------------------------------------------------------
-# LOAD PREPROCESSED CSV
-# -----------------------------------------------------------------------------
-def load_preprocessed(ticker):
-    fname = os.path.join(DATA_DIR, f"{ticker}_Preprocessed.csv")
-    if os.path.exists(fname):
-        return pd.read_csv(fname)
+
+# =====================================================
+# 3 — Helper: Load preprocessed CSV
+# =====================================================
+def get_default_df(ticker: str):
+    filename = f"{ticker}_Preprocessed.csv"
+
+    # Try root directory
+    if os.path.exists(filename):
+        return pd.read_csv(filename)
+
+    # Try capitalization variations
+    filename2 = f"{ticker}_Preprocessed.CSV"
+    if os.path.exists(filename2):
+        return pd.read_csv(filename2)
+
     return None
 
-# -----------------------------------------------------------------------------
-# CONSTRUCT FEATURE ROW FOR PREDICTION
-# -----------------------------------------------------------------------------
-def construct_feature_row(base_row, fund_updates, user_inputs, feature_cols):
+
+# =====================================================
+# 4 — Combine user inputs + fundamentals into one row
+# =====================================================
+def construct_feature_row(base_row, edits, user_inputs, feature_cols):
     row = base_row.copy()
 
-    # apply fundamentals
-    for k, v in fund_updates.items():
-        if k in row.index:
-            row[k] = v
+    # Apply fundamental edits
+    for key, val in edits.items():
+        if key in row.index:
+            row[key] = val
 
-    # apply user daily inputs
-    for k, v in user_inputs.items():
-        if k in row.index:
-            row[k] = v
+    # Apply market inputs
+    for key, val in user_inputs.items():
+        if key in row.index:
+            row[key] = val
 
-    row = row.apply(pd.to_numeric, errors='coerce')
-    row = row[feature_cols]  # enforce correct column order
+    row = row.apply(pd.to_numeric, errors="coerce")
+    row = row[feature_cols]
 
     return row.to_frame().T
 
 
-# -----------------------------------------------------------------------------
-# STREAMLIT UI
-# -----------------------------------------------------------------------------
-st.title("📈 PSX — 90-Day Price Predictor (Random Forest & XGBoost)")
-st.write("Select a stock, optionally modify fundamentals, enter today's market inputs, and view the 90-day forecast.")
+# =====================================================
+# 5 — UI Layout
+# =====================================================
+st.title("📈 PSX — 90-Day Price Predictor (Random Forest + XGBoost)")
 
 stock_list = ["EFERT", "MLCF", "MARI", "SAZEW", "TOMCL", "NBP"]
 selected = st.sidebar.selectbox("Select Stock", stock_list)
 
-# Load model files
+# Load models
 rf_model, xgb_model = load_models(selected)
 
 if rf_model is None or xgb_model is None:
-    st.error("❌ Required model files not found in models_extracted/. Upload models.zip correctly.")
+    st.error("❌ Models not found in models_extracted/ — fix your models.zip upload.")
     st.stop()
 
-# Load dataset
-df = get_default_df(selected, data_path=data_path)
+# Load CSV
+df = get_default_df(selected)
 if df is None:
-    st.error(f"❌ Preprocessed file {selected}_Preprocessed.csv missing in repository.")
+    st.error("❌ Preprocessed CSV NOT found. Upload *_Preprocessed.csv* to repo root.")
     st.stop()
 
-# Clean dataset
-df = df.replace({',': ''}, regex=True)
-for c in df.columns:
-    if c != "Date":
-        df[c] = pd.to_numeric(df[c], errors='coerce')
-
+# Cleanup numeric data
+df = df.replace({",": ""}, regex=True)
+for col in df.columns:
+    if col != "Date":
+        df[col] = pd.to_numeric(df[col], errors="coerce")
 df = df.fillna(method="ffill").fillna(method="bfill")
 
-st.markdown("### 📌 Latest Available Row")
+st.subheader("📌 Latest Available Data (Auto-Filled Defaults)")
 st.dataframe(df.tail(1))
 
-# Determine feature columns
-feature_cols = [c for c in df.columns if c not in ("Date", "Target_90d", "Return_90d")]
-
-# Last row as base
+# Training feature columns (exclude target columns)
+feature_cols = [c for c in df.columns if c not in ["Date", "Target_90d", "Return_90d"]]
 base_row = df.iloc[-1][feature_cols]
 
-# -----------------------------------------------------------------------------
-# FUNDAMENTALS SECTION
-# -----------------------------------------------------------------------------
-st.markdown("## 🧮 Fundamentals (auto-loaded)")
+
+# =====================================================
+# FUNDAMENTALS
+# =====================================================
+st.subheader("🏛 Fundamental Ratios")
 
 if selected == "NBP":
     fund_cols = ["PE", "EPS", "PB", "DividendYield", "DebtToEquity", "RoAA"]
 else:
     fund_cols = ["PE", "EPS", "PB", "DividendYield", "DebtToEquity", "NetIncomeMargin"]
 
-edit_funds = st.checkbox("Edit Fundamental Ratios?", value=False)
+edit_funds = st.checkbox("Edit Fundamental Values?", value=False)
 
-fund_updates = {}
-
-for f in fund_cols:
-    default_val = base_row.get(f, 0.0)
-    if pd.isna(default_val):
-        default_val = 0.0
+fund_edits = {}
+for col in fund_cols:
+    default = float(base_row[col]) if col in base_row.index else 0.0
 
     if edit_funds:
-        fund_updates[f] = st.number_input(f"{f}", value=float(default_val), format="%.6f")
+        fund_edits[col] = st.number_input(col, value=default, format="%.6f")
     else:
-        st.write(f"**{f}:** {default_val}")
-        fund_updates[f] = float(default_val)
+        st.write(f"**{col}:** {default}")
+        fund_edits[col] = default
 
 
-# -----------------------------------------------------------------------------
-# DAILY INPUT FIELD SECTION
-# -----------------------------------------------------------------------------
-st.markdown("## 📤 Daily Inputs (Today's Market Data)")
+# =====================================================
+# MARKET INPUTS
+# =====================================================
+st.subheader("📊 Daily Market Inputs")
 
 user_inputs = {}
-daily_fields = ["Price", "Volume", "RSI14", "KSE_Close", "KSE_Volume"]
+market_cols = ["Price", "Volume", "RSI14", "KSE_Close", "KSE_Volume"]
 
-for d in daily_fields:
-    if d in feature_cols:
-        default_val = base_row.get(d, 0.0)
-        if pd.isna(default_val):
-            default_val = 0.0
-
-        if d in ["Volume", "KSE_Volume"]:
-            user_inputs[d] = st.number_input(d, value=int(default_val), step=1)
-        else:
-            user_inputs[d] = st.number_input(d, value=float(default_val), format="%.6f")
+for col in market_cols:
+    default = float(base_row[col]) if col in base_row.index else 0.0
+    if col in ["Volume", "KSE_Volume"]:
+        user_inputs[col] = st.number_input(col, value=int(default), step=1)
+    else:
+        user_inputs[col] = st.number_input(col, value=float(default), format="%.6f")
 
 
-# -----------------------------------------------------------------------------
-# BUILD FEATURE VECTOR
-# -----------------------------------------------------------------------------
-final_row = construct_feature_row(base_row, fund_updates, user_inputs, feature_cols)
+# =====================================================
+# CONSTRUCT FINAL INPUT ROW
+# =====================================================
+final_row = construct_feature_row(base_row, fund_edits, user_inputs, feature_cols)
 
-st.markdown("### 🔍 Feature Vector Sent to Model")
+st.subheader("🧩 Final Feature Row Sent to Model")
 st.dataframe(final_row.T)
 
-# -----------------------------------------------------------------------------
-# PREDICT BUTTON
-# -----------------------------------------------------------------------------
-if st.button("🚀 Predict 90-Day Price"):
-    final_numeric = final_row.apply(pd.to_numeric, errors='coerce')
 
-    # RF prediction
-    pred_rf = rf_model.predict(final_numeric)[0]
+# =====================================================
+# PREDICTION BUTTON
+# =====================================================
+if st.button("🔮 Predict 90-Day Price"):
 
-    # XGB prediction
-    pred_xgb = xgb_model.predict(final_numeric)[0]
+    pred_rf = rf_model.predict(final_row)[0]
+    pred_xgb = xgb_model.predict(final_row)[0]
 
-    current_price = final_numeric.iloc[0]["Price"]
+    current_price = final_row.iloc[0]["Price"]
 
     col1, col2 = st.columns(2)
+
     with col1:
-        st.metric("Random Forest Prediction (90d)", f"{pred_rf:.2f} PKR")
+        st.metric("RF Predicted Price (90d)", f"{pred_rf:.2f} PKR")
         st.write(f"Return: {(pred_rf - current_price) / current_price * 100:.2f}%")
 
     with col2:
-        st.metric("XGBoost Prediction (90d)", f"{pred_xgb:.2f} PKR")
+        st.metric("XGB Predicted Price (90d)", f"{pred_xgb:.2f} PKR")
         st.write(f"Return: {(pred_xgb - current_price) / current_price * 100:.2f}%")
 
-    # Quick mini plot
-    st.markdown("### 📊 Prediction Comparison")
+
+    # Mini Chart
     fig, ax = plt.subplots()
     ax.plot(["Today", "RF", "XGB"], [current_price, pred_rf, pred_xgb], marker="o")
     ax.set_ylabel("Price (PKR)")
     ax.grid(True)
     st.pyplot(fig)
 
+    # Optional CSV download
+    result = final_row.copy()
+    result["Pred_RF_90d"] = pred_rf
+    result["Pred_XGB_90d"] = pred_xgb
 
-# -----------------------------------------------------------------------------
-# OPTIONAL METRICS
-# -----------------------------------------------------------------------------
-if st.checkbox("Show Quick Model Metrics"):
-    from sklearn.model_selection import train_test_split
+    st.download_button(
+        "Download Prediction Row",
+        result.to_csv(index=False),
+        file_name=f"{selected}_prediction.csv",
+        mime="text/csv",
+    )
 
-    X = df[feature_cols]
-    y = df["Target_90d"]
 
-    Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.2, random_state=42)
-
-    pred_rf_test = rf_model.predict(Xte)
-    pred_xgb_test = xgb_model.predict(Xte)
-
-    rmse_rf = np.sqrt(((yte - pred_rf_test) ** 2).mean())
-    rmse_xgb = np.sqrt(((yte - pred_xgb_test) ** 2).mean())
-
-    st.write(f"RF RMSE: {rmse_rf:.4f}")
-    st.write(f"XGB RMSE: {rmse_xgb:.4f}")
-
-st.write("---")
-st.write("App built for CAIP Project — Models auto-loaded from models.zip.")
+st.markdown("---")
+st.write("Built for CAIP Final Project — PSX Forecasting Tool.")
