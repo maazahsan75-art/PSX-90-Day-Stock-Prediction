@@ -8,37 +8,29 @@ import matplotlib.pyplot as plt
 
 st.set_page_config(layout="wide", page_title="PSX 90-Day Predictor")
 
-# -----------------------------------------------------------------------------
-# EXTRACT MODELS ONLY ONCE
-# -----------------------------------------------------------------------------
-# Extract ZIP every run to guarantee models exist
+# --- Extract models.zip EVERY RUN ---
 if os.path.exists("models.zip"):
+    import shutil
     if os.path.exists("models_extracted"):
-        import shutil
-        shutil.rmtree("models_extracted")  # remove old folder
+        shutil.rmtree("models_extracted")  # delete old folder
     with zipfile.ZipFile("models.zip", "r") as z:
         z.extractall("models_extracted")
 
-
-MODELS_DIR = "models_extracted"
-DATA_DIR = "."
-
-st.write("📁 Root directory files:", os.listdir("."))
+# --- DEBUG OUTPUT ---
+st.write("📁 Root directory:", os.listdir("."))
 if os.path.exists("models_extracted"):
-    st.write("📁 Models extracted folder:", os.listdir("models_extracted"))
+    st.write("📁 models_extracted:", os.listdir("models_extracted"))
 else:
-    st.write("❌ models_extracted folder does NOT exist")
+    st.write("❌ models_extracted not found")
 
-
-# -----------------------------------------------------------------------------
-# LOAD MODELS
-# -----------------------------------------------------------------------------
+# --- Load Models ---
 def load_models(ticker):
-    rf_path = os.path.join(MODELS_DIR, f"{ticker}_RF.pkl")
-    xgb_path = os.path.join(MODELS_DIR, f"{ticker}_XGB.pkl")
+    rf_path = os.path.join("models_extracted", f"{ticker}_RF.pkl")
+    xgb_path = os.path.join("models_extracted", f"{ticker}_XGB.pkl")
 
     rf = joblib.load(rf_path) if os.path.exists(rf_path) else None
     xgb = joblib.load(xgb_path) if os.path.exists(xgb_path) else None
+
     return rf, xgb
 
 # -----------------------------------------------------------------------------
