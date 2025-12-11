@@ -91,21 +91,25 @@ if df is None:
     st.error("❌ Preprocessed CSV NOT found. Upload *_Preprocessed.csv* to repo root.")
     st.stop()
 
-# Clean numeric columns
+# Basic cleaning
 df = df.replace({',': ''}, regex=True)
-for col in df.columns:
-    if col != "Date":
-        df[col] = pd.to_numeric(df[col], errors="coerce")
+for c in df.columns:
+    if c != "Date":
+        df[c] = pd.to_numeric(df[c], errors='coerce')
 
-# Convert Date to datetime (IMPORTANT)
+# Convert Date column properly
 if "Date" in df.columns:
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
 
-# Sort by Date to ensure latest row is truly the latest date
+# Sort by date so the latest row is truly the latest market entry
 df = df.sort_values("Date").reset_index(drop=True)
 
-# Fix missing values
+# Fill missing values
 df = df.fillna(method="ffill").fillna(method="bfill")
+
+# Show latest correct row (same as before)
+st.markdown("### Latest Available Data Snapshot (auto-filled defaults)")
+st.dataframe(df.tail(1), height=160)
 
 
 # Training feature columns (exclude target columns)
