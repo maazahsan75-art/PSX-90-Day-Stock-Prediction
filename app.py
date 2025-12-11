@@ -11,9 +11,14 @@ st.set_page_config(layout="wide", page_title="PSX 90-Day Predictor")
 # -----------------------------------------------------------------------------
 # EXTRACT MODELS ONLY ONCE
 # -----------------------------------------------------------------------------
-if os.path.exists("models.zip") and not os.path.exists("models_extracted"):
+# Extract ZIP every run to guarantee models exist
+if os.path.exists("models.zip"):
+    if os.path.exists("models_extracted"):
+        import shutil
+        shutil.rmtree("models_extracted")  # remove old folder
     with zipfile.ZipFile("models.zip", "r") as z:
         z.extractall("models_extracted")
+
 
 MODELS_DIR = "models_extracted"
 DATA_DIR = "."
