@@ -46,34 +46,45 @@ def load_preprocessed(ticker):
         st.error(f"❌ {fname} not found in repo!")
         return None
 
-    df = pd.read_csv(fname)
+    # Load raw CSV with no assumptions
+    df = pd.read_csv(fname, dtype=str)
 
-    # ----------- FIX ALL DATA ISSUES ----------------
-    df = df.dropna(how="all")                           # Remove empty rows
-    df = df.replace({',': ''}, regex=True)              # Strip commas globally
+    # 1️⃣ Remove completely empty rows
+    df = df.dropna(how="all")
 
-    # Convert numeric columns
+    # 2️⃣ Strip whitespace from all cells
+    df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x)
+
+    # 3️⃣ Replace commas inside numeric fields
+    df = df.replace({',': ''}, regex=True)
+
+    # 4️⃣ Convert Date using MULTI-FORMAT PARSER
+    df["Date"] = pd.to_datetime(
+        df["Date"],
+        errors="coerce",
+        dayfirst=False,
+        infer_datetime_format=True
+    )
+
+    # 5️⃣ Drop rows where Date could not be parsed
+    df = df.dropna(subset=["Date"])
+
+    # 6️⃣ Convert all other columns to numeric
     for col in df.columns:
         if col != "Date":
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    # Convert Date
-    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+    # 7️⃣ Remove rows where all numeric columns are NaN
+    numeric_cols = [c for c in df.columns if c != "Date"]
+    df = df.dropna(subset=numeric_cols, how="all")
 
-    # Drop rows where Date couldn't be parsed
-    df = df.dropna(subset=["Date"])
-
-    # Remove duplicates
-    df = df.drop_duplicates()
-
-    # Sort properly
+    # 8️⃣ Sort by Date and reset index
     df = df.sort_values("Date").reset_index(drop=True)
 
-    # Forward & backward fill
-    df = df.fillna(method="ffill").fillna(method="bfill")
+    # 9️⃣ Forward and backward fill missing fundamentals
+    df[numeric_cols] = df[numeric_cols].fillna(method="ffill").fillna(method="bfill")
 
     return df
-
 
 # -------------------------------------
 # Helper: Build Feature Vector
