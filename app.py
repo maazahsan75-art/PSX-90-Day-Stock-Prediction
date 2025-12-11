@@ -17,8 +17,13 @@ if os.path.exists("models.zip") and not os.path.exists("models_extracted"):
 
 MODELS_DIR = "models_extracted"
 DATA_DIR = "."
-st.write("Files in repo root:", os.listdir("."))
-st.write("Files in models_extracted:", os.listdir("models_extracted") if os.path.exists("models_extracted") else "Not extracted yet")
+
+st.write("📁 Root directory files:", os.listdir("."))
+if os.path.exists("models_extracted"):
+    st.write("📁 Models extracted folder:", os.listdir("models_extracted"))
+else:
+    st.write("❌ models_extracted folder does NOT exist")
+
 
 # -----------------------------------------------------------------------------
 # LOAD MODELS
