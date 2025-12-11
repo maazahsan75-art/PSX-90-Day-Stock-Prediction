@@ -4,9 +4,16 @@ import pandas as pd
 import numpy as np
 import joblib
 import os
+import zipfile
+import os
 import matplotlib.pyplot as plt
 
 st.set_page_config(layout="wide", page_title="PSX 90-day Predictor")
+
+# Extract models.zip once
+if os.path.exists("models.zip") and not os.path.exists("models_extracted"):
+    with zipfile.ZipFile("models.zip", "r") as z:
+        z.extractall("models_extracted")
 
 # ------- Helper functions -------
 def safe_numeric_series(s):
