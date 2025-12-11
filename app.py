@@ -81,7 +81,7 @@ if rf_model is None or xgb_model is None:
     st.stop()
 
 # Load dataset
-df = load_preprocessed(selected)
+df = get_default_df(selected, data_path=data_path)
 if df is None:
     st.error(f"❌ Preprocessed file {selected}_Preprocessed.csv missing in repository.")
     st.stop()
