@@ -91,15 +91,22 @@ if df is None:
     st.error("❌ Preprocessed CSV NOT found. Upload *_Preprocessed.csv* to repo root.")
     st.stop()
 
-# Cleanup numeric data
-df = df.replace({",": ""}, regex=True)
+# Clean numeric columns
+df = df.replace({',': ''}, regex=True)
 for col in df.columns:
     if col != "Date":
         df[col] = pd.to_numeric(df[col], errors="coerce")
+
+# Convert Date to datetime (IMPORTANT)
+if "Date" in df.columns:
+    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+
+# Sort by Date to ensure latest row is truly the latest date
+df = df.sort_values("Date").reset_index(drop=True)
+
+# Fix missing values
 df = df.fillna(method="ffill").fillna(method="bfill")
 
-st.subheader("📌 Latest Available Data (Auto-Filled Defaults)")
-st.dataframe(df.tail(1))
 
 # Training feature columns (exclude target columns)
 feature_cols = [c for c in df.columns if c not in ["Date", "Target_90d", "Return_90d"]]
