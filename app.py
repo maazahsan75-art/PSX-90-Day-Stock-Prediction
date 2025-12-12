@@ -14,7 +14,8 @@ import matplotlib.pyplot as plt
 
 st.set_page_config(layout="wide", page_title="PSX 90-Day Predictor")
 
-st.warning("This is the NEW version of app.py")
+st.error("VERSION CHECK: CLEANER LOADER ACTIVE")
+
 
 
 # -------------------------------------
@@ -49,43 +50,54 @@ def load_preprocessed(ticker):
         st.error(f"❌ {fname} not found in repo!")
         return None
 
-    # Load raw CSV with no assumptions
-    df = pd.read_csv(fname, dtype=str)
+    # Load raw CSV strictly as text (prevents wrong type inference)
+    df = pd.read_csv(fname, dtype=str, keep_default_na=False)
 
-    # 1️⃣ Remove completely empty rows
-    df = df.dropna(how="all")
+    # ---------------------------------------
+    # 🔥 1) REMOVE ALL EMPTY OR WHITESPACE ROWS
+    # ---------------------------------------
+    df = df[~df.apply(lambda r: r.astype(str).str.strip().eq("").all(), axis=1)]
 
-    # 2️⃣ Strip whitespace from all cells
-    df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x)
-
-    # 3️⃣ Replace commas inside numeric fields
+    # ---------------------------------------
+    # 🔥 2) CLEAN COMMAS, SPACES, NON-NUMERIC GARBAGE
+    # ---------------------------------------
     df = df.replace({',': ''}, regex=True)
+    df = df.apply(lambda col: col.str.strip() if col.dtype == "object" else col)
 
-    # 4️⃣ Convert Date using MULTI-FORMAT PARSER
+    # ---------------------------------------
+    # 🔥 3) PARSE DATE USING STRICT MULTI-FORMAT
+    # ---------------------------------------
     df["Date"] = pd.to_datetime(
         df["Date"],
         errors="coerce",
-        dayfirst=False,
         infer_datetime_format=True
     )
 
-    # 5️⃣ Drop rows where Date could not be parsed
+    # Remove rows where Date failed to parse
     df = df.dropna(subset=["Date"])
 
-    # 6️⃣ Convert all other columns to numeric
+    # ---------------------------------------
+    # 🔥 4) CONVERT NUMERIC COLUMNS PROPERLY
+    # ---------------------------------------
     for col in df.columns:
         if col != "Date":
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    # 7️⃣ Remove rows where all numeric columns are NaN
+    # ---------------------------------------
+    # 🔥 5) DROP ROWS WHERE ALL NUMERIC COLUMNS ARE NaN
+    # ---------------------------------------
     numeric_cols = [c for c in df.columns if c != "Date"]
     df = df.dropna(subset=numeric_cols, how="all")
 
-    # 8️⃣ Sort by Date and reset index
+    # ---------------------------------------
+    # 🔥 6) SORT BY DATE ASCENDING & RESET
+    # ---------------------------------------
     df = df.sort_values("Date").reset_index(drop=True)
 
-    # 9️⃣ Forward and backward fill missing fundamentals
-    df[numeric_cols] = df[numeric_cols].fillna(method="ffill").fillna(method="bfill")
+    # ---------------------------------------
+    # 🔥 7) FORWARD + BACKWARD FILL FOR GAPS
+    # ---------------------------------------
+    df[numeric_cols] = df[numeric_cols].ffill().bfill()
 
     return df
 
