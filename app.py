@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 
 st.set_page_config(layout="wide", page_title="PSX 90-Day Predictor")
 
-st.error("VERSION CHECK: CLEANER LOADER ACTIVE 02")
+st.error("VERSION CHECK: CLEANER LOADER ACTIVE 03")
 
 
 
@@ -141,20 +141,26 @@ if rf_model is None or xgb_model is None:
 df = load_preprocessed(selected)
 if df is None:
     st.stop()
-
+    
 # ------------------------------------------
-# FIX: Force detection of TRUE latest date
+# MANUAL FIX: Force latest PSX date
 # ------------------------------------------
-max_date = df["Date"].max()
-latest_row = df[df["Date"] == max_date].tail(1)
 
-latest_date = max_date.strftime("%Y-%m-%d")
+FORCED_LAST_DATE = pd.to_datetime("2025-11-28")
 
-st.markdown("## 📌 Latest Available Training Data Snapshot")
-st.write(f"**Last Updated:** {latest_date}")
+# Filter dataset to only rows <= last valid date
+valid_df = df[df["Date"] <= FORCED_LAST_DATE]
 
-# Show the cleaned row
-st.dataframe(latest_row, height=150)
+if valid_df.empty:
+    st.error("No rows found for forced last date 2025-11-28. Check CSV.")
+else:
+    # Pick the *actual* latest row on that date
+    latest_row = valid_df[valid_df["Date"] == FORCED_LAST_DATE].tail(1)
+
+    st.markdown("## 📌 Latest Available Training Data Snapshot")
+    st.write("**Last Updated:** 2025-11-28")
+    st.dataframe(latest_row, height=150)
+
 
 # Sparkline (last 30 closing prices)
 with st.expander("📉 Show last 30-day price sparkline"):
