@@ -142,15 +142,18 @@ df = load_preprocessed(selected)
 if df is None:
     st.stop()
 
-# -------------------------------------
-# Show Latest Snapshot
-# -------------------------------------
-latest_row = df.tail(1)
-latest_date = latest_row["Date"].iloc[0].strftime("%Y-%m-%d")
+# ------------------------------------------
+# FIX: Force detection of TRUE latest date
+# ------------------------------------------
+max_date = df["Date"].max()
+latest_row = df[df["Date"] == max_date].tail(1)
+
+latest_date = max_date.strftime("%Y-%m-%d")
 
 st.markdown("## 📌 Latest Available Training Data Snapshot")
 st.write(f"**Last Updated:** {latest_date}")
 
+# Show the cleaned row
 st.dataframe(latest_row, height=150)
 
 # Sparkline (last 30 closing prices)
