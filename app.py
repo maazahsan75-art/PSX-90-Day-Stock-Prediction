@@ -9,15 +9,6 @@ import matplotlib.pyplot as plt
 
 st.set_page_config(layout="wide", page_title="PSX 90-day Predictor")
 
-st.markdown(
-    "<span style='color:gray; font-size:16px;'>"
-    "📌 <b>Note:</b> The model is trained on PSX historical data up to "
-    "<b>28 November 2025</b>. Predictions are based on patterns learned "
-    "from data available until that date."
-    "</span>",
-    unsafe_allow_html=True
-)
-
 # ================================
 #   Extract models.zip (only once)
 # ================================
@@ -74,6 +65,7 @@ st.markdown(
     "This tool predicts **90-day forward stock prices** using hybrid technical, "
     "fundamental and market-wide features."
 )
+st.info("The model is trained on data up to **28 November 2025**.")
 
 st.markdown("**VERSION CHECK:** UI-CLEAN (Date Hidden, Stable Latest Snapshot)")
 
