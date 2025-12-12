@@ -1,9 +1,4 @@
-# -----------------------------  
-#  PSX 90-DAY PRICE PREDICTOR  
-#  Final Streamlit Application  
-#  With cleaned latest row fix, last updated stamp & sparkline  
-# -----------------------------  
-
+# app.py
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -12,99 +7,42 @@ import os
 import zipfile
 import matplotlib.pyplot as plt
 
-st.set_page_config(layout="wide", page_title="PSX 90-Day Predictor")
+st.set_page_config(layout="wide", page_title="PSX 90-day Predictor")
 
-st.error("VERSION CHECK: CLEANER LOADER ACTIVE 03")
-
-
-
-# -------------------------------------
-# Extract models.zip ONCE
-# -------------------------------------
+# ================================
+#   Extract models.zip (only once)
+# ================================
 if os.path.exists("models.zip") and not os.path.exists("models_extracted"):
     with zipfile.ZipFile("models.zip", "r") as z:
         z.extractall("models_extracted")
 
-MODELS_PATH = "models_extracted"
+MODEL_DIR = "models_extracted"
 
-
-# -------------------------------------
-# Helper: Load Models
-# -------------------------------------
+# ================================
+#   Helper Functions
+# ================================
 def load_models(ticker):
-    rf_path = os.path.join(MODELS_PATH, f"{ticker}_RF.pkl")
-    xgb_path = os.path.join(MODELS_PATH, f"{ticker}_XGB.pkl")
+    """Load RF and XGB models from extracted folder."""
+    rf_path = os.path.join(MODEL_DIR, f"{ticker}_RF.pkl")
+    xgb_path = os.path.join(MODEL_DIR, f"{ticker}_XGB.pkl")
 
     rf = joblib.load(rf_path) if os.path.exists(rf_path) else None
     xgb = joblib.load(xgb_path) if os.path.exists(xgb_path) else None
     return rf, xgb
 
 
-# -------------------------------------
-# Helper: Load Cleaned CSV
-# -------------------------------------
-def load_preprocessed(ticker):
+def load_preprocessed_csv(ticker):
+    """Load preprocessed CSV from repo."""
     fname = f"{ticker}_Preprocessed.csv"
+    if os.path.exists(fname):
+        df = pd.read_csv(fname)
+        return df
+    st.error(f"Preprocessed file not found: {fname}")
+    st.stop()
 
-    if not os.path.exists(fname):
-        st.error(f"❌ {fname} not found in repo!")
-        return None
 
-    # Load raw CSV strictly as text (prevents wrong type inference)
-    df = pd.read_csv(fname, dtype=str, keep_default_na=False)
-
-    # ---------------------------------------
-    # 🔥 1) REMOVE ALL EMPTY OR WHITESPACE ROWS
-    # ---------------------------------------
-    df = df[~df.apply(lambda r: r.astype(str).str.strip().eq("").all(), axis=1)]
-
-    # ---------------------------------------
-    # 🔥 2) CLEAN COMMAS, SPACES, NON-NUMERIC GARBAGE
-    # ---------------------------------------
-    df = df.replace({',': ''}, regex=True)
-    df = df.apply(lambda col: col.str.strip() if col.dtype == "object" else col)
-
-    # ---------------------------------------
-    # 🔥 3) PARSE DATE USING STRICT MULTI-FORMAT
-    # ---------------------------------------
-    df["Date"] = pd.to_datetime(
-        df["Date"],
-        errors="coerce",
-        infer_datetime_format=True
-    )
-
-    # Remove rows where Date failed to parse
-    df = df.dropna(subset=["Date"])
-
-    # ---------------------------------------
-    # 🔥 4) CONVERT NUMERIC COLUMNS PROPERLY
-    # ---------------------------------------
-    for col in df.columns:
-        if col != "Date":
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-
-    # ---------------------------------------
-    # 🔥 5) DROP ROWS WHERE ALL NUMERIC COLUMNS ARE NaN
-    # ---------------------------------------
-    numeric_cols = [c for c in df.columns if c != "Date"]
-    df = df.dropna(subset=numeric_cols, how="all")
-
-    # ---------------------------------------
-    # 🔥 6) SORT BY DATE ASCENDING & RESET
-    # ---------------------------------------
-    df = df.sort_values("Date").reset_index(drop=True)
-
-    # ---------------------------------------
-    # 🔥 7) FORWARD + BACKWARD FILL FOR GAPS
-    # ---------------------------------------
-    df[numeric_cols] = df[numeric_cols].ffill().bfill()
-
-    return df
-
-# -------------------------------------
-# Helper: Build Feature Vector
-# -------------------------------------
 def construct_feature_row(base_row, edits, user_inputs, feature_cols):
+    """Create single prediction row with proper features."""
     row = base_row.copy()
 
     for k, v in edits.items():
@@ -116,111 +54,114 @@ def construct_feature_row(base_row, edits, user_inputs, feature_cols):
             row[k] = v
 
     row = row.apply(pd.to_numeric, errors="coerce")
-    row = row[feature_cols]
-
-    return row.to_frame().T
+    return row[feature_cols].to_frame().T
 
 
-# -------------------------------------
-# UI Layout
-# -------------------------------------
-st.title("📈 PSX — 90-Day Price Predictor (Random Forest & XGBoost)")
-st.write("Select a stock, review fundamentals, enter today's inputs, and get predictions.")
+# ================================
+#           UI Header
+# ================================
+st.title("PSX — 90-Day Stock Price Predictor (Random Forest + XGBoost)")
+st.markdown(
+    "This tool predicts **90-day forward stock prices** using hybrid technical, "
+    "fundamental and market-wide features."
+)
 
+st.markdown("**VERSION CHECK:** UI-CLEAN (Date Hidden, Stable Latest Snapshot)")
+
+# ================================
+#       Select Stock
+# ================================
 stock_list = ["EFERT", "MLCF", "MARI", "SAZEW", "TOMCL", "NBP"]
-selected = st.sidebar.selectbox("Select Stock", stock_list)
+selected = st.sidebar.selectbox("Choose Stock", stock_list)
 
-# Load Models
 rf_model, xgb_model = load_models(selected)
 
 if rf_model is None or xgb_model is None:
-    st.error("❌ Required model files missing in *models_extracted/*")
+    st.error("❌ Could not load models for this stock. Ensure .pkl files exist.")
     st.stop()
 
-# Load Data
-df = load_preprocessed(selected)
-if df is None:
-    st.stop()
-    
-# ------------------------------------------
-# MANUAL FIX: Force latest PSX date
-# ------------------------------------------
+# ================================
+#     Load Preprocessed Data
+# ================================
+df = load_preprocessed_csv(selected)
 
-FORCED_LAST_DATE = pd.to_datetime("2025-11-28")
+# Clean all numbers EXCEPT Date (which we will hide anyway)
+df = df.replace({",": ""}, regex=True)
+for col in df.columns:
+    if col != "Date":
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+df = df.fillna(method="ffill").fillna(method="bfill")
 
-# Filter dataset to only rows <= last valid date
-valid_df = df[df["Date"] <= FORCED_LAST_DATE]
+# Identify feature columns
+feature_cols = [c for c in df.columns if c not in ["Date", "Target_90d", "Return_90d"]]
 
-if valid_df.empty:
-    st.error("No rows found for forced last date 2025-11-28. Check CSV.")
-else:
-    # Pick the *actual* latest row on that date
-    latest_row = valid_df[valid_df["Date"] == FORCED_LAST_DATE].tail(1)
+# ================================
+#  SHOW LATEST ROW (DATE HIDDEN)
+# ================================
+latest_row = df.iloc[-1].copy()
+latest_display = latest_row.drop(labels=["Date"])  # HIDE DATE
 
-    st.markdown("## 📌 Latest Available Training Data Snapshot")
-    st.write("**Last Updated:** 2025-11-28")
-    st.dataframe(latest_row, height=150)
+st.subheader("Latest Available Training Snapshot (Date Hidden)")
+st.table(latest_display.to_frame(name="Value"))
 
+# Optional sparkline (last 30 days)
+if "Price" in df.columns:
+    st.markdown("#### Last 30-day Price Sparkline")
+    last_30 = df["Price"].tail(30).tolist()
+    st.line_chart(last_30)
 
-# Sparkline (last 30 closing prices)
-with st.expander("📉 Show last 30-day price sparkline"):
-    fig, ax = plt.subplots(figsize=(5, 1.5))
-    price_data = df["Price"].tail(30).values
-    ax.plot(price_data, linewidth=2)
-    ax.set_xticks([])
-    ax.set_yticks([])
-    st.pyplot(fig)
-
-
-# -------------------------------------
-# Fundamentals Section
-# -------------------------------------
-st.markdown("## 🧮 Fundamentals (auto-filled)")
-
-feature_cols = [c for c in df.columns if c not in ("Date", "Target_90d", "Return_90d")]
-base_row = df.iloc[-1][feature_cols]
+# ================================
+# FUNDAMENTALS SECTION
+# ================================
+st.subheader("Fundamental Ratios (Editable)")
 
 fund_cols = ["PE", "EPS", "PB", "DividendYield", "DebtToEquity"]
-fund_cols.append("RoAA" if selected == "NBP" else "NetIncomeMargin")
+if selected == "NBP":
+    fund_cols.append("RoAA")
+else:
+    fund_cols.append("NetIncomeMargin")
 
-edit_funds = st.checkbox("Edit fundamentals?", value=False)
+edit_funds = st.checkbox("Edit Fundamental Ratios?", value=False)
 
 fund_edits = {}
 for f in fund_cols:
-    default_val = float(base_row.get(f, 0.0))
+    default_val = float(latest_row.get(f, 0.0))
     if edit_funds:
-        new_val = st.number_input(f"{f}:", value=default_val, format="%.6f")
+        new_val = st.number_input(f"{f}", value=default_val, format="%.6f")
     else:
         st.write(f"**{f}:** {default_val}")
         new_val = default_val
     fund_edits[f] = new_val
 
+# ================================
+# DAILY USER INPUT SECTION
+# ================================
+st.subheader("Daily Market Inputs")
 
-# -------------------------------------
-# User Inputs
-# -------------------------------------
-st.markdown("## 📊 Daily Inputs")
+daily_inputs = {}
+required_daily = ["Price", "Volume", "RSI14", "KSE_Close", "KSE_Volume"]
 
-user_inputs = {}
-for field in ["Price", "Volume", "RSI14", "KSE_Close", "KSE_Volume"]:
-    if field in base_row.index:
-        default = float(base_row[field])
-        if field in ["Volume", "KSE_Volume"]:
-            val = st.number_input(f"{field}:", value=int(default))
+for c in required_daily:
+    if c in feature_cols:
+        default_val = float(latest_row[c])
+        if c in ["Volume", "KSE_Volume"]:
+            v = st.number_input(f"{c} (no commas)", value=int(default_val), step=1)
         else:
-            val = st.number_input(f"{field}:", value=float(default), format="%.6f")
-        user_inputs[field] = val
+            v = st.number_input(f"{c}", value=default_val, format="%.4f")
+        daily_inputs[c] = v
 
+# ================================
+#       BUILD FINAL ROW
+# ================================
+final_row = construct_feature_row(latest_row, fund_edits, daily_inputs, feature_cols)
 
-# -------------------------------------
-# Create Row & Predict
-# -------------------------------------
-final_row = construct_feature_row(base_row, fund_edits, user_inputs, feature_cols)
+st.markdown("### Features Sent to Model")
+st.dataframe(final_row)
 
-st.markdown("### 🔍 Features Sent to Model")
-st.dataframe(final_row.T)
-
-if st.button("🚀 Predict 90-Day Price"):
+# ================================
+#       PREDICT BUTTON
+# ================================
+if st.button("Predict 90-Day Price"):
     try:
         pred_rf = rf_model.predict(final_row)[0]
         pred_xgb = xgb_model.predict(final_row)[0]
@@ -228,19 +169,24 @@ if st.button("🚀 Predict 90-Day Price"):
 
         col1, col2 = st.columns(2)
         with col1:
-            st.metric("Random Forest Prediction (90d)", f"{pred_rf:.2f} PKR",
-                      f"{((pred_rf - current_price)/current_price)*100:.2f}%")
+            st.metric("Random Forest Predicted Price (90d)", f"{pred_rf:.2f} PKR")
+            st.write(f"Expected Return: {(pred_rf-current_price)/current_price*100:.2f}%")
 
         with col2:
-            st.metric("XGBoost Prediction (90d)", f"{pred_xgb:.2f} PKR",
-                      f"{((pred_xgb - current_price)/current_price)*100:.2f}%")
+            st.metric("XGBoost Predicted Price (90d)", f"{pred_xgb:.2f} PKR")
+            st.write(f"Expected Return: {(pred_xgb-current_price)/current_price*100:.2f}%")
 
-        # Tiny comparison chart
-        fig2, ax2 = plt.subplots()
-        ax2.plot([0,1,2], [current_price, pred_rf, pred_xgb], marker="o")
-        ax2.set_xticks([0,1,2])
-        ax2.set_xticklabels(["Today", "RF", "XGB"])
-        st.pyplot(fig2)
+        # Mini Graph
+        st.subheader("Prediction Comparison")
+        fig, ax = plt.subplots()
+        ax.plot(["Today", "RF", "XGB"], [current_price, pred_rf, pred_xgb], marker="o")
+        ax.set_ylabel("Price (PKR)")
+        st.pyplot(fig)
 
     except Exception as e:
-        st.error(f"❌ Prediction error: {e}")
+        st.error(f"Prediction Error: {e}")
+
+st.markdown("---")
+st.write("Developed for CAIP Final Project • PSX 90-Day Prediction Tool")
+
+
