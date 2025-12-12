@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 
 st.set_page_config(layout="wide", page_title="PSX 90-Day Predictor")
 
-st.error("VERSION CHECK: CLEANER LOADER ACTIVE")
+st.error("VERSION CHECK: CLEANER LOADER ACTIVE 02")
 
 
 
