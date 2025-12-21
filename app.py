@@ -86,7 +86,7 @@ if rf_model is None or xgb_model is None:
 # ================================
 df = load_preprocessed_csv(selected)
 
-# Clean all numbers EXCEPT Date (which we will hide anyway)
+# Clean all numbers EXCEPT Date 
 df = df.replace({",": ""}, regex=True)
 for col in df.columns:
     if col != "Date":
@@ -102,7 +102,7 @@ feature_cols = [c for c in df.columns if c not in ["Date", "Target_90d", "Return
 latest_row = df.iloc[-1].copy()
 latest_display = latest_row.drop(labels=["Date"])  # HIDE DATE
 
-st.subheader("Latest Available Training Snapshot (Date Hidden)")
+st.subheader("Latest Available Training Snapshot")
 st.table(latest_display.to_frame(name="Value"))
 
 # Optional sparkline (last 30 days)
