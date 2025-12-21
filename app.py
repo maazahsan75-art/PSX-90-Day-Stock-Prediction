@@ -67,7 +67,7 @@ st.markdown(
 )
 st.info("The model is trained on data up to **28 November 2025**.")
 
-st.markdown("**VERSION CHECK:** UI-CLEAN (Date Hidden, Stable Latest Snapshot)")
+st.markdown("**VERSION CHECK:** 21st Dec 2025")
 
 # ================================
 #       Select Stock
@@ -188,6 +188,6 @@ if st.button("Predict 90-Day Price"):
         st.error(f"Prediction Error: {e}")
 
 st.markdown("---")
-st.write("Developed for CAIP Final Project • PSX 90-Day Prediction Tool")
+st.write("Developed by Maaz Ahsan • PSX 90-Day Prediction Tool")
 
 
